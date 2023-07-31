@@ -1,3 +1,4 @@
+// G
 // Copyright 2023 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +16,8 @@
 package tokenbucket
 
 import (
+	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -134,4 +137,36 @@ func TestTokenBucket(t *testing.T) {
 	// Check that our exhaustion duration is unchanged, since we've stayed in
 	// the positive.
 	checkExhausted(initialExhausted + (20+90)*time.Millisecond)
+}
+
+func TestWaitCtx(t *testing.T) {
+	var tb TokenBucket
+	tb.Init(1, 100)
+	// Drain the initial tokens.
+	if fulfilled, _ := tb.TryToFulfill(100); !fulfilled {
+		t.Fatalf("could not drain initial tokens")
+	}
+	waitResult := make(chan error, 1)
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	go func() {
+		// This would take 100 seconds to return unless we cancel the context.
+		waitResult <- tb.WaitCtx(ctx, 100)
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+	select {
+	case <-waitResult:
+		t.Fatal("WaitCtx terminated unexpectedly")
+	default:
+	}
+
+	ctxCancel()
+	select {
+	case err := <-waitResult:
+		if err == nil || !strings.Contains(err.Error(), "context canceled") {
+			t.Errorf("unexpected error from WaitCtx: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf("WaitCtx did not return after context cancelation")
+	}
 }

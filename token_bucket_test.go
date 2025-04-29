@@ -136,6 +136,15 @@ func TestTokenBucket(t *testing.T) {
 	// Check that our exhaustion duration is unchanged, since we've stayed in
 	// the positive.
 	checkExhausted(initialExhausted + (20+90)*time.Millisecond)
+
+	// Test EnsureLowerBound.
+	tb.Adjust(-30)
+	check(-9)
+	tb.EnsureLowerBound(-1)
+	check(-1)
+	// Lower-bound cannot exceed burst.
+	tb.EnsureLowerBound(125)
+	check(100)
 }
 
 func TestWaitCtx(t *testing.T) {
